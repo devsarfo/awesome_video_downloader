@@ -12,19 +12,13 @@ A Flutter plugin for downloading videos in various formats (HLS, DASH, MP4) with
   - HLS (HTTP Live Streaming)
   - DASH (Dynamic Adaptive Streaming over HTTP)
   - MP4 and other direct video files
-- 🎥 Quality selection for adaptive streams:
-  - Resolution selection (1080p, 720p, etc.)
-  - Bitrate control
-  - HDR support detection
-- ⚡ Smart download management:
-  - Duplicate detection
-  - Concurrent downloads
-  - Background processing
-- ⏯️ Download controls:
-  - Pause/Resume
-  - Cancel
-  - Progress tracking
+- ⚡ Concurrent downloads
+- ⏯️ Pause, resume, and cancel downloads
+- 📊 Real-time progress tracking
+- 🔄 Background download support
 - 📱 Cross-platform (iOS & Android)
+- 🎥 Quality selection for adaptive streams
+- 💾 Offline playback support
 
 ## Getting Started
 
@@ -34,13 +28,15 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  awesome_video_downloader: ^0.1.6
+  awesome_video_downloader: ^1.0.0
 ```
 
 ### Platform Setup
 
 #### iOS
-Add to `Info.plist`:
+
+Add the following keys to your `Info.plist`:
+
 ```xml
 <key>UIBackgroundModes</key>
 <array>
@@ -50,7 +46,9 @@ Add to `Info.plist`:
 ```
 
 #### Android
-Add to `AndroidManifest.xml`:
+
+Add these permissions to your `AndroidManifest.xml`:
+
 ```xml
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
@@ -77,125 +75,121 @@ downloader.getDownloadProgress(downloadId).listen(
   (progress) {
     print('Progress: ${progress.formattedProgress}');
     print('Speed: ${progress.formattedSpeed}');
+    print('Downloaded: ${progress.formattedSize}');
+    
+    if (progress.isCompleted) {
+      print('Download completed! File at: ${progress.filePath}');
+    }
   },
+  onError: (error) => print('Download error: $error'),
 );
-
-// Check status
-final status = await downloader.getDownloadStatus(downloadId);
-print('State: ${status.state.name}');
 ```
 
-### Quality Selection
+### Download with Options
 
 ```dart
-// Get available qualities
-final qualities = await downloader.getAvailableQualities(url);
-
-// Show quality selection dialog
-final selectedQuality = await showDialog<VideoQuality>(
-  context: context,
-  builder: (context) => QualitySelectionDialog(qualities: qualities),
-);
-
-if (selectedQuality != null) {
-  final downloadId = await downloader.startDownload(
-    url: url,
-    fileName: 'video.mp4',
-    format: 'hls',
-    options: VideoDownloadOptions(
-      minimumBitrate: selectedQuality.bitrate,
-      maximumBitrate: selectedQuality.bitrate,
-      preferHDR: selectedQuality.isHDR,
-    ),
-  );
-}
-```
-
-### Duplicate Handling
-
-```dart
-// Will return existing download ID if video is already being downloaded
 final downloadId = await downloader.startDownload(
-  url: url,
+  url: 'https://example.com/stream.m3u8',
   fileName: 'video.mp4',
-  format: 'mp4',
-  allowDuplicates: false, // default
+  format: 'hls',
+  options: VideoDownloadOptions(
+    minimumBitrate: 1500000,  // 1.5 Mbps
+    maximumBitrate: 4000000,  // 4 Mbps
+    preferHDR: true,
+    preferMultichannel: true,
+    headers: {
+      'Authorization': 'Bearer token123',
+    },
+  ),
 );
+```
 
-// Check if video was previously downloaded
-final existing = await downloader.checkExistingDownload(url);
-if (existing != null) {
-  print('Video exists: ${existing.filePath}');
+### Managing Downloads
+
+```dart
+// Pause a download
+await downloader.pauseDownload(downloadId);
+
+// Resume a download
+await downloader.resumeDownload(downloadId);
+
+// Cancel a download
+await downloader.cancelDownload(downloadId);
+
+// Get all downloads
+final downloads = await downloader.getAllDownloads();
+for (final download in downloads) {
+  print('${download.fileName}: ${download.state.name}');
 }
 ```
+
+## Download States
+
+Downloads can be in one of these states:
+- `notStarted`: Download hasn't started yet
+- `downloading`: Download is in progress
+- `paused`: Download is paused
+- `completed`: Download finished successfully
+- `failed`: Download failed with an error
+- `cancelled`: Download was cancelled
 
 ## Models
-
-### DownloadStatus
-Simple status information:
-```dart
-final status = await downloader.getDownloadStatus(downloadId);
-print('State: ${status.state.name}');
-print('Error: ${status.error}');
-```
 
 ### DownloadProgress
 Real-time progress information:
 ```dart
-downloader.getDownloadProgress(downloadId).listen((progress) {
-  print('Progress: ${progress.formattedProgress}'); // "45.0%"
-  print('Speed: ${progress.formattedSpeed}');       // "1.5 MB/s"
-});
+final progress = DownloadProgress(
+  id: 'download_123',
+  progress: 0.45,          // 45% complete
+  bytesDownloaded: 1024,
+  totalBytes: 2048,
+  speed: 512.0,           // bytes per second
+  state: DownloadState.downloading,
+  filePath: '/path/to/file.mp4',
+);
+
+print(progress.formattedProgress);  // "45.0%"
+print(progress.formattedSpeed);     // "0.51 MB/s"
+print(progress.formattedSize);      // "1.0/2.0 MB"
 ```
 
-### DownloadInfo
-Detailed download information:
+### VideoDownloadOptions
+Configuration for downloads:
 ```dart
-final info = await downloader.getAllDownloads().first;
-print('File: ${info.fileName}');
-print('URL: ${info.url}');
-print('Created: ${info.createdAt}');
-print('Size: ${info.formattedSize}');
+final options = VideoDownloadOptions(
+  minimumBitrate: 1500000,    // 1.5 Mbps
+  maximumBitrate: 4000000,    // 4 Mbps
+  preferHDR: true,
+  preferMultichannel: true,
+  headers: {
+    'Authorization': 'Bearer token123',
+  },
+);
 ```
 
 ## Error Handling
 
+The plugin provides detailed error information:
 ```dart
 try {
-  final downloadId = await downloader.startDownload(
+  await downloader.startDownload(
     url: 'invalid_url',
     fileName: 'video.mp4',
     format: 'mp4',
   );
-} on ArgumentError catch (e) {
-  print('Invalid arguments: ${e.message}');
-} on StateError catch (e) {
-  print('State error: ${e.message}');
 } catch (e) {
-  print('Download failed: $e');
+  if (e is ArgumentError) {
+    print('Invalid arguments: ${e.message}');
+  } else {
+    print('Download failed: $e');
+  }
 }
 ```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-
-IMPORTANT TO ADD TO INFO PLIST
-
-```xml
-<key>UIBackgroundModes</key>
-<array>
-  <string>audio</string>
-  <string>fetch</string>
-</array>
-<key>NSAppTransportSecurity</key>
-<dict>
-  <key>NSAllowsArbitraryLoads</key>
-  <true/>
-</dict>
-```

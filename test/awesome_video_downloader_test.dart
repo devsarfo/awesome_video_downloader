@@ -2,244 +2,179 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:awesome_video_downloader/awesome_video_downloader.dart';
 import 'package:awesome_video_downloader/awesome_video_downloader_platform_interface.dart';
 import 'package:awesome_video_downloader/awesome_video_downloader_method_channel.dart';
-import 'package:awesome_video_downloader/models/download_config.dart';
-import 'package:awesome_video_downloader/models/download_task.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 class MockAwesomeVideoDownloaderPlatform
     with MockPlatformInterfaceMixin
     implements AwesomeVideoDownloaderPlatform {
-  final List<String> activeDownloads = [];
-  final Map<String, double> downloadProgress = {};
+  @override
+  Future<void> initialize() async {}
 
   @override
-  Future<String?> startDownload(DownloadConfig config) async {
-    final taskId = 'test_id_${activeDownloads.length}';
-    activeDownloads.add(taskId);
-    downloadProgress[taskId] = 0.0;
-    return taskId;
+  Future<String> startDownload({
+    required String url,
+    required String fileName,
+    required String format,
+    Map<String, dynamic>? options,
+  }) async {
+    return 'mock_download_id';
   }
 
   @override
-  Future<void> pauseDownload(String taskId) async {
-    if (!activeDownloads.contains(taskId)) {
-      throw Exception('Download not found');
-    }
+  Future<void> pauseDownload(String downloadId) async {}
+
+  @override
+  Future<void> resumeDownload(String downloadId) async {}
+
+  @override
+  Future<void> cancelDownload(String downloadId) async {}
+
+  @override
+  Future<Map<String, dynamic>> getDownloadStatus(String downloadId) async {
+    return {
+      'id': downloadId,
+      'state': DownloadState.downloading.name,
+      'bytesDownloaded': 1024,
+      'totalBytes': 2048,
+      'error': null,
+      'filePath': '/path/to/file.mp4',
+    };
   }
 
   @override
-  Future<void> resumeDownload(String taskId) async {
-    if (!activeDownloads.contains(taskId)) {
-      throw Exception('Download not found');
-    }
+  Future<List<Map<String, dynamic>>> getAllDownloads() async {
+    return [
+      {
+        'id': 'mock_download_id',
+        'url': 'https://example.com/video.mp4',
+        'fileName': 'video.mp4',
+        'format': 'mp4',
+        'state': DownloadState.downloading.name,
+        'createdAt': DateTime.now().toIso8601String(),
+        'bytesDownloaded': 1024,
+        'totalBytes': 2048,
+        'filePath': '/path/to/file.mp4',
+      }
+    ];
   }
 
   @override
-  Future<void> cancelDownload(String taskId) async {
-    if (!activeDownloads.contains(taskId)) {
-      throw Exception('Download not found');
-    }
-    activeDownloads.remove(taskId);
-    downloadProgress.remove(taskId);
-  }
-
-  @override
-  Future<List<DownloadTask>> getActiveDownloads() async {
-    return activeDownloads
-        .map((taskId) => DownloadTask(
-              taskId: taskId,
-              url: 'test_url',
-              title: 'test_title',
-              status: DownloadStatus.downloading,
-              progress: downloadProgress[taskId] ?? 0.0,
-            ))
-        .toList();
-  }
-
-  @override
-  Stream<DownloadProgress> getDownloadProgress(String taskId) {
-    if (!activeDownloads.contains(taskId)) {
-      return Stream.error('Download not found');
-    }
-
-    return Stream.periodic(const Duration(milliseconds: 100), (count) {
-      final progress = (count * 10.0).clamp(0.0, 100.0);
-      downloadProgress[taskId] = progress;
-      return DownloadProgress(
-        taskId: taskId,
-        progress: progress,
-        bytesDownloaded: (progress * 1024).round(),
-        totalBytes: 102400,
-      );
-    }).take(11); // Will emit progress from 0% to 100%
-  }
-
-  @override
-  Future<bool> isVideoPlayableOffline(String taskId) async {
-    return downloadProgress[taskId] == 100.0;
-  }
-
-  @override
-  Future<String?> getDownloadedFilePath(String taskId) {
-    // TODO: implement getDownloadedFilePath
-    throw UnimplementedError();
-  }
-
-  @override
-  Stream<bool> getVideoPlayableStatus(String taskId) {
-    // TODO: implement getVideoPlayableStatus
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<bool> deleteDownloadedFile(String taskId) {
-    // TODO: implement deleteDownloadedFile
-    throw UnimplementedError();
+  Stream<Map<String, dynamic>> getDownloadProgress(String downloadId) {
+    return Stream.fromIterable([
+      {
+        'id': downloadId,
+        'progress': 0.5,
+        'bytesDownloaded': 1024,
+        'totalBytes': 2048,
+        'speed': 512.0,
+        'state': DownloadState.downloading.name,
+        'filePath': '/path/to/file.mp4',
+      }
+    ]);
   }
 }
 
 void main() {
-  late AwesomeVideoDownloader plugin;
-  late MockAwesomeVideoDownloaderPlatform fakePlatform;
-
-  setUp(() {
-    fakePlatform = MockAwesomeVideoDownloaderPlatform();
-    AwesomeVideoDownloaderPlatform.instance = fakePlatform;
-    plugin = AwesomeVideoDownloader();
-  });
+  final AwesomeVideoDownloaderPlatform initialPlatform =
+      AwesomeVideoDownloaderPlatform.instance;
 
   test('$MethodChannelAwesomeVideoDownloader is the default instance', () {
-    expect(AwesomeVideoDownloaderPlatform.instance,
-        isInstanceOf<MethodChannelAwesomeVideoDownloader>());
+    expect(
+        initialPlatform, isInstanceOf<MethodChannelAwesomeVideoDownloader>());
   });
 
-  group('startDownload', () {
-    test('returns task ID on successful download start', () async {
-      final taskId = await plugin.startDownload(
-        DownloadConfig(url: 'test_url', title: 'test_title'),
+  group('AwesomeVideoDownloader', () {
+    late AwesomeVideoDownloader downloader;
+    late MockAwesomeVideoDownloaderPlatform fakePlatform;
+
+    setUp(() {
+      fakePlatform = MockAwesomeVideoDownloaderPlatform();
+      AwesomeVideoDownloaderPlatform.instance = fakePlatform;
+      downloader = AwesomeVideoDownloader();
+    });
+
+    test('initialize', () async {
+      await downloader.initialize();
+    });
+
+    test('startDownload', () async {
+      final downloadId = await downloader.startDownload(
+        url: 'https://example.com/video.mp4',
+        fileName: 'video.mp4',
+        format: 'mp4',
       );
-      expect(taskId, isNotNull);
-      expect(fakePlatform.activeDownloads, contains(taskId));
+      expect(downloadId, 'mock_download_id');
     });
 
-    test('supports custom bitrate and HDR settings', () async {
-      final taskId = await plugin.startDownload(
-        DownloadConfig(
-          url: 'test_url',
-          title: 'test_title',
-          minimumBitrate: 5000000,
-          prefersHDR: true,
-        ),
-      );
-      expect(taskId, isNotNull);
-    });
-  });
-
-  group('download management', () {
-    late String taskId;
-
-    setUp(() async {
-      taskId = await plugin.startDownload(
-            DownloadConfig(url: 'test_url', title: 'test_title'),
-          ) ??
-          '';
-    });
-
-    test('can pause download', () async {
-      await expectLater(plugin.pauseDownload(taskId), completes);
-    });
-
-    test('can resume download', () async {
-      await expectLater(plugin.resumeDownload(taskId), completes);
-    });
-
-    test('can cancel download', () async {
-      await plugin.cancelDownload(taskId);
-      final downloads = await plugin.getActiveDownloads();
-      expect(downloads, isEmpty);
-    });
-
-    test('throws when managing non-existent download', () async {
-      const invalidTaskId = 'invalid_task_id';
-      expect(plugin.pauseDownload(invalidTaskId), throwsException);
-      expect(plugin.resumeDownload(invalidTaskId), throwsException);
-      expect(plugin.cancelDownload(invalidTaskId), throwsException);
-    });
-  });
-
-  group('download progress', () {
-    test('emits progress updates', () async {
-      final taskId = await plugin.startDownload(
-            DownloadConfig(url: 'test_url', title: 'test_title'),
-          ) ??
-          '';
-
-      final progressUpdates = await plugin
-          .getDownloadProgress(taskId)
-          .take(5)
-          .map((event) => event.progress)
-          .toList();
-
-      expect(progressUpdates, hasLength(5));
-      expect(progressUpdates.first, 0.0);
-      expect(progressUpdates.last, greaterThan(progressUpdates.first));
-    });
-
-    test('reports bytes downloaded', () async {
-      final taskId = await plugin.startDownload(
-            DownloadConfig(url: 'test_url', title: 'test_title'),
-          ) ??
-          '';
-
-      final progress = await plugin.getDownloadProgress(taskId).first;
-      expect(progress.bytesDownloaded, isNonNegative);
-      expect(progress.totalBytes, greaterThan(0));
-    });
-  });
-
-  group('active downloads', () {
-    test('returns list of active downloads', () async {
-      // Start multiple downloads
-      final taskIds = await Future.wait([
-        plugin.startDownload(DownloadConfig(url: 'url1', title: 'title1')),
-        plugin.startDownload(DownloadConfig(url: 'url2', title: 'title2')),
-      ]);
-
-      final downloads = await plugin.getActiveDownloads();
-      expect(downloads, hasLength(2));
+    test('startDownload with invalid URL', () async {
       expect(
-        downloads.map((d) => d.taskId),
-        containsAll(taskIds.whereType<String>()),
+        () => downloader.startDownload(
+          url: 'invalid_url',
+          fileName: 'video.mp4',
+          format: 'mp4',
+        ),
+        throwsA(isA<ArgumentError>()),
       );
     });
 
-    test('updates after cancelling download', () async {
-      final taskId = await plugin.startDownload(
-            DownloadConfig(url: 'test_url', title: 'test_title'),
-          ) ??
-          '';
-
-      await plugin.cancelDownload(taskId);
-      final downloads = await plugin.getActiveDownloads();
-      expect(downloads, isEmpty);
+    test('startDownload with invalid format', () async {
+      expect(
+        () => downloader.startDownload(
+          url: 'https://example.com/video.mp4',
+          fileName: 'video.mp4',
+          format: 'invalid',
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
     });
-  });
 
-  group('offline playback', () {
-    test('reports correct offline playability status', () async {
-      final taskId = await plugin.startDownload(
-            DownloadConfig(url: 'test_url', title: 'test_title'),
-          ) ??
-          '';
+    test('getDownloadStatus', () async {
+      final status = await downloader.getDownloadStatus('mock_download_id');
+      expect(status.id, 'mock_download_id');
+      expect(status.state, DownloadState.downloading);
+      expect(status.bytesDownloaded, 1024);
+      expect(status.totalBytes, 2048);
+      expect(status.error, null);
+      expect(status.filePath, '/path/to/file.mp4');
+    });
 
-      // Initially not playable
-      expect(await plugin.isVideoPlayableOffline(taskId), false);
+    test('getDownloadProgress', () async {
+      final progress =
+          await downloader.getDownloadProgress('mock_download_id').first;
+      expect(progress.id, 'mock_download_id');
+      expect(progress.progress, 0.5);
+      expect(progress.bytesDownloaded, 1024);
+      expect(progress.totalBytes, 2048);
+      expect(progress.speed, 512.0);
+      expect(progress.state, DownloadState.downloading);
+      expect(progress.filePath, '/path/to/file.mp4');
+    });
 
-      // Wait for download to complete
-      await plugin.getDownloadProgress(taskId).last;
+    test('VideoDownloadOptions validation', () {
+      expect(
+        () => VideoDownloadOptions(minimumBitrate: -1),
+        throwsA(isA<ArgumentError>()),
+      );
 
-      // Should be playable after completion
-      expect(await plugin.isVideoPlayableOffline(taskId), true);
+      expect(
+        () => VideoDownloadOptions(
+          minimumBitrate: 2000000,
+          maximumBitrate: 1000000,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      final options = VideoDownloadOptions(
+        minimumBitrate: 1000000,
+        maximumBitrate: 2000000,
+        preferHDR: true,
+        preferMultichannel: true,
+      );
+
+      expect(options.minimumBitrate, 1000000);
+      expect(options.maximumBitrate, 2000000);
+      expect(options.preferHDR, true);
+      expect(options.preferMultichannel, true);
     });
   });
 }
